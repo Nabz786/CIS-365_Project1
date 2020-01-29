@@ -62,7 +62,7 @@ class ReflexCaptureAgent(CaptureAgent):
     This method is to decide what strategy the offensive bot will first
     try to do. It has a 33% chance of going immediately to the power capsule,
     which is a 'cheese' strat. The other chance it will seek to find the
-    closest food with the least amount of conflict.
+    closest food.
     :param gameState: The variables of the current state.
     """
     rand = random.randint(1, 4)
@@ -72,7 +72,8 @@ class ReflexCaptureAgent(CaptureAgent):
         # These values are hardcoded, seem to be least conflict area
         # travels along the outer edge of the map first.
         if gameState.isOnRedTeam(self.index):
-            return (21, 1)
+            return self.getClosestFood(gameState)
+            #return (21, 1)
         else:
             return (10, 14)
 
@@ -81,7 +82,6 @@ class ReflexCaptureAgent(CaptureAgent):
     Function that returns the (x, y) coordinate of the closest food near
     an agent. This behavior isnt too advanced as it does not account for 
     enemies in the way to the food.
-    :param gameState: The variables of the current state.
     """
     foodList = self.getFood(gameState).asList()
     if len(foodList) > 0: # This should always be True,  but better safe than sorry
@@ -94,6 +94,7 @@ class ReflexCaptureAgent(CaptureAgent):
         if temp_pos < min_pos:
           min_pos = temp_pos
           best_choice = food
+    #print(best_choice)
     return best_choice
 
   def isGoalState(self, state, gameState):
@@ -137,10 +138,20 @@ class ReflexCaptureAgent(CaptureAgent):
         return actions
 
       #this line is wrong, removed cost
-      print(gameState.getLegalActions(self.index))
+      #print(gameState.getLegalActions(self.index))
       #print(self.getSuccessors(gameState))
       #for nextNode, action, cost in self.getSuccessors(gameState):
-      for nextNode, action, cost in gameState.getLegalActions(current_pos):
+      legalMoves = gameState.getLegalActions(self.index)
+      futureMoves = []
+      for move in legalMoves:
+          successor = self.getSuccessors(gameState)
+          print(successor)
+          #futureMoves.append(successor.getAgentPosition(self.index))
+
+      #print(succesor.getAgentPosition(self.index))
+      #raw_input()
+
+      for nextNode, action, cost in futureMoves:
       #self.getSuccessor(gameState):
         newAction = actions + [action]
         myQueue.push((nextNode, newAction))
@@ -149,7 +160,6 @@ class ReflexCaptureAgent(CaptureAgent):
   def chooseAction(self, gameState):
     """
     Picks among the actions with the highest Q(s,a).
-    :param gameState: The variables of the current state.
     """
     actions = gameState.getLegalActions(self.index)
 
@@ -199,21 +209,20 @@ class ReflexCaptureAgent(CaptureAgent):
     #self.index
     #for action in gameState.getLegalActions(self.index):
     for action in [Directions.NORTH, Directions.SOUTH, Directions.EAST, Directions.WEST]:
-        (x, y) = gameState.getAgentState(self.index).getPosition()
-        #print(x)
-        #print(y)
-        #(x, y) = gameState.getAgentState(self.index)
-        dx, dy = Actions.directionToVector(action)
-        nextx, nexty = int(x + dx), int(y + dy)
-        #print("x:", nextx, "y:", nexty)
-        #raw_input()
-        walls = gameState.getWalls()
-        #if not gameState.getWalls()[nextx][nexty]:
-        if not walls[nextx][nexty]:
-          nextState = (nextx, nexty)
-          cost = self.costFn(nextState)
-            #removed cost here
-          successors.append( ( nextState, action, cost) )
+      (x, y) = gameState.getAgentState(self.index).getPosition()
+      #print(x)
+      #print(y)
+      #(x, y) = gameState.getAgentState(self.index)
+      dx, dy = Actions.directionToVector(action)
+      nextx, nexty = int(x + dx), int(y + dy)
+      #print("x:", nextx, "y:", nexty)
+      #raw_input()
+      walls = gameState.getWalls()
+      #if not gameState.getWalls()[nextx][nexty]:
+      if not walls[nextx][nexty]:
+        nextState = (nextx, nexty)
+        cost = self.costFn(nextState)
+        successors.append( ( nextState, action, cost) )
     return successors
 
   def evaluate(self, gameState, action):
@@ -250,7 +259,7 @@ class ReflexCaptureAgent(CaptureAgent):
 # This class defines an offensive agent. The defined
 # behavior of this agent is to prioritize a goal,
 # which is a certain (x, y) coordinate. It then creates a list
-# of actions to take to reach its goal based on a
+# of actions to take to reach its gaol based on a
 # breadthFirstSearch algorithm.
 # Improvements need to be made with enemy interaction. 
 ##################################################
