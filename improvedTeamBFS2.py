@@ -239,19 +239,30 @@ class OffensiveReflexAgent(CaptureAgent):
     heavy list manipulations and many loops
     """
 
-    #List that will hold the cells that lie on our teams side, but border the other team
+    # List that will hold the cells that lie on our teams side, but border the other team
     borderCells = []
 
-    #Obtain the matrix of walls around the entire map
+    # Obtain the matrix of walls around the entire map
     wallsMatrix = gameState.data.layout.walls
     wallsList = wallsMatrix.asList()
 
-    #Using the width of the map, calculate the Red and Blue teams border cell column value
-    #The calculations return 15.5, the red teams side ends at 15, blue teams side starts at 16, hence ceil()
+    # Using the width of the map, calculate the Red and Blue teams border cell column value
+    # The calculations return 15.5, the red teams side ends at 15, blue teams side starts at 16, hence ceil()
     layoutX = wallsMatrix.width
     redX = (layoutX - 1) / 2
     blueX = (int)(math.ceil((float)(layoutX - 1) / 2))
 
-    #Using the height of the map, the number of rows, loop through the number of rows
-    #and add the cells to the return list that are not walls
+    # Using the height of the map, the number of rows, loop through the number of rows
+    # and add the cells to the return list that are not walls
+    layoutY = wallsMatrix.height - 1
+    if (gameState.isOnRedTeam(self.index)):
+      for y in range(1, layoutY - 1):
+        if ((redX, y) not in wallsList):
+          borderCells.append((redX, y))
+    else:
+      for y in range(1, layoutY - 1):
+        if ((blueX, y) not in wallsList):
+          borderCells.append((blueX, y))
+
+    return borderCells
 
