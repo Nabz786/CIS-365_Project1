@@ -151,11 +151,24 @@ class ReflexCaptureAgent(CaptureAgent):
         newAction = actions + [action]
         myQueue.push((nextNode, newAction))
 
+  def hasDied(self, gameState):
+    if len(self.observationHistory) > 10:
+       obsHistory = self.observationHistory[len(self.observationHistory)-2]
+       posHistory = obsHistory.getAgentPosition(self.index)
+       currentPos = gameState.getAgentPosition(self.index)
+       distHistory = self.getMazeDistance(currentPos, posHistory)
+       if distHistory > 1:
+         return True
+    return False
+
   def chooseAction(self, gameState):
     """
     Picks among the actions with the highest Q(s,a).
     """
     #raw_input()
+    if self.hasDied(gameState):
+      self.actionList = []
+      self.updateGoalState(self.getClosestFood(gameState))
     self.debugDraw(self.goal, (1, 0, 0))
     #raw_input()
     if len(self.actionList) == 0:
