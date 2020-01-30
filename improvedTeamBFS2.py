@@ -26,11 +26,17 @@ from game import Directions
 import game
 from util import nearestPoint
 from game import Actions
-#TODO:Check for uneeded imports.
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'OffensiveReflexAgent', second = 'DefensiveAgent2'):
+        first = 'OffensiveReflexAgent', second = 'DefensiveAgent2'):
   return [eval(first)(firstIndex), eval(second)(secondIndex)]
+
+###################################################
+# Test class that creates a dummy agent.
+###################################################
+class agent(CaptureAgent):
+    def chooseAction(self, gameState):
+        return random.choice(gameState.getLegalActions(self.index))
 
 ###################################################
 # Base class for an offensive bot. Sets up initial state,
@@ -42,45 +48,35 @@ def createTeam(firstIndex, secondIndex, isRed,
 # of any of these functions included here.
 # (In particular the original getFeatures and getWeights methods).
 ###################################################
-class agent(CaptureAgent):
-    def chooseAction(self, gameState):
-        return random.choice(gameState.getLegalActions(self.index))
-
 class OffensiveReflexAgent(CaptureAgent):
 
   def registerInitialState(self, gameState):
     """
     Function to establish initial states of the game.
-    This is where its goal is to find food or go straight 
-    for the power capsule.
+    This is where the offensive agent gets its first
+    target destination (self.goal).
     :param gameState: The variables of the current state.
     """
-    self.start = gameState.getAgentPosition(self.index)
     CaptureAgent.registerInitialState(self, gameState)
-    self.goal = self.rushCapsule(gameState)
+    self.goal = self.defineFirstGoal(gameState)
     self.walls = gameState.getWalls()
     self.costFn = lambda x: 1
+    start = time.time()
     self.actionList = self.breadthFirstSearch(gameState)
-    print(self.actionList)
+    print('eval time for agent:', (time.time() - start))
+    #print(self.actionList)
 
-  def rushCapsule(self, gameState):
+  def defineFirstGoal(self, gameState):
     """
     This method is to decide what strategy the offensive bot will first
-    try to do. It has a 33% chance of going immediately to the power capsule,
-    which is a 'cheese' strat. The other chance it will seek to find the
-    closest food.
+    try to do. The first goal is hardcoded because it seems to be 
+    the least conflict area and travels along the outer edge of the map.
     :param gameState: The variables of the current state.
     """
-    rand = random.randint(1, 4)
-    if rand == 3:
-      return self.getCapsules(gameState)
+    if gameState.isOnRedTeam(self.index):
+      return (21, 1)
     else:
-        # These values are hardcoded, seem to be least conflict area
-        # travels along the outer edge of the map first.
-        if gameState.isOnRedTeam(self.index):
-            return (21, 1)
-        else:
-            return (10, 14)
+      return (10, 14)
 
   def getClosestFood(self, gameState):
     """
@@ -116,7 +112,7 @@ class OffensiveReflexAgent(CaptureAgent):
     Changes the (x, y) destination to a new goal.
     :param goal: New (x, y) coordinate that represents end target.
     """
-
+    
     numCarrying = gamestate.getAgentState(self.index).numCarrying
     if numCarrying >= 1:
       borderCells = self.getBorderCells(gamestate)
@@ -128,26 +124,19 @@ class OffensiveReflexAgent(CaptureAgent):
         if dist < bestDist:
           bestDist = dist
           bestCell = cell
-      self.debugClear()
+      #self.debugClear()
       self.goal = bestCell
       return
     else:
-      self.debugClear()
+      #self.debugClear()
       self.goal = goal
 
-
-  def checkGoalState(self):
-   """
-   Check for enemies on or near the goal, (x, y).
-   """
-   print(self.index)
-   print('goal', self.goal)
-   raw_input()
-   goalDist = self.getMazeDistance(self.index, self.goal)
-   if goalDist < 5:
-     print('check')
-
   def breadthFirstSearch(self, gameState):
+    """
+    Search algorithm that finds a path to the current goal.
+    This should be called everytime the goal is updated.
+    :param gameState: The variables of the current state.
+    """
     current_pos = gameState.getAgentPosition(self.index)
 
     if self.isGoalState(current_pos):
@@ -169,6 +158,13 @@ class OffensiveReflexAgent(CaptureAgent):
         myQueue.push((nextNode, newAction))
 
   def hasDied(self, gameState):
+    """
+    Function that checks if the offensive bot has been eaten.
+    This function is important because it resets the goal to the closest
+    food point and also resets the list of actions to get
+    there (self.actionList).
+    :param gameState: The variables of the current state.
+    """
     if len(self.observationHistory) > 10:
        obsHistory = self.observationHistory[len(self.observationHistory)-2]
        posHistory = obsHistory.getAgentPosition(self.index)
@@ -180,17 +176,20 @@ class OffensiveReflexAgent(CaptureAgent):
 
   def chooseAction(self, gameState):
     """
-    Picks among the actions with the highest Q(s,a).
+    Every iteration pops off the first action of actionList,
+    and decides if actionList must be updated.
+    :param gameState: The variables of the current state.
     """
-    #raw_input()
-    #self.checkGoalState()
 
     if self.hasDied(gameState):
       self.actionList = []
       self.updateGoalState(self.getClosestFood(gameState), gameState)
 
-    self.debugDraw(self.goal, (1, 0, 0))
-    #raw_input()
+    #self.debugDraw(self.goal, (1, 0, 0))
+    if len(self.actionList) == 0:
+      self.updateGoalState(self.getClosestFood(gameState), gameState)
+      self.actionList = []
+      self.actionList = self.breadthFirstSearch(gameState)
 
     enemies = self.getOpponents(gameState)
 
@@ -208,49 +207,21 @@ class OffensiveReflexAgent(CaptureAgent):
             if dist < bestDist:
               bestDist = dist
               bestCell = cell
-          self.debugClear()
+          #self.debugClear()
           self.goal = bestCell
           self.actionList = []
           self.actionList = self.breadthFirstSearch(gameState)
 
-
-    if len(self.actionList) == 0:
-      self.updateGoalState(self.getClosestFood(gameState), gameState)
-      self.actionList = self.breadthFirstSearch(gameState)
-
-    print(self.actionList)
+    #print(self.actionList)
     return self.actionList.pop(0)
-    #actions = gameState.getLegalActions(self.index)
-    # You can profile your evaluation time by uncommenting these lines
-    # start = time.time()
-    #values = [self.evaluate(gameState, a) for a in actions]
-    #if self.index == 1:
-      #print(values, file=sys.stderr)
-      # print(self.getPreviousObservation(), file=sys.stderr)
-
-    # print 'eval time for agent %d: %.4f' % (self.index, time.time() - start)
-
-    #maxValue = max(values)
-    #bestActions = [a for a, v in zip(actions, values) if v == maxValue]
-    # if self.index == 1:
-    #   print(bestActions, file=sys.stderr)
-
-    #foodLeft = len(self.getFood(gameState).asList())
-
-    #if foodLeft <= 2 or gameState.getAgentState(self.index).numCarrying >= 3:
-      #bestDist = 9999
-      #for action in actions:
-        #successor = self.getSuccessor(gameState, action)
-        #pos2 = successor.getAgentPosition(self.index)
-	#dist = self.getMazeDistance(self.start,pos2)
-        #if dist < bestDist:
-          #bestAction = action
-          #bestDist = dist
-      #return bestAction
-
-    #return random.choice(bestActions)
 
   def getSuccessors(self, state):
+    """
+    This method is called by the search function to check if a 
+    state has additional moves it can make. A list of possible moves 
+    for that specific state is returned.
+    :param state: the (x, y) coordinate of a position.
+    """
     successors = []
     bestDist = 9999
     for action in [Directions.NORTH, Directions.SOUTH, Directions.EAST, Directions.WEST]:
