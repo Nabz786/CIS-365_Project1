@@ -21,7 +21,7 @@
 from __future__ import print_function
 from captureAgents import CaptureAgent
 import distanceCalculator
-import random, time, util, sys
+import random, time, util, sys, math
 from game import Directions
 import game
 from util import nearestPoint
@@ -29,7 +29,7 @@ from game import Actions
 #TODO:Check for uneeded imports.
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'OffensiveReflexAgent', second = 'agent'):
+               first = 'OffensiveReflexAgent', second = 'DefensiveAgent2'):
   return [eval(first)(firstIndex), eval(second)(secondIndex)]
 
 ###################################################
@@ -111,13 +111,30 @@ class OffensiveReflexAgent(CaptureAgent):
     isGoal = state == self.goal
     return isGoal
 
-  def updateGoalState(self, goal):
+  def updateGoalState(self, goal, gamestate):
     """
     Changes the (x, y) destination to a new goal.
     :param goal: New (x, y) coordinate that represents end target.
     """
-    self.debugClear()
-    self.goal = goal
+
+    numCarrying = gamestate.getAgentState(self.index).numCarrying
+    if numCarrying >= 1:
+      borderCells = self.getBorderCells(gamestate)
+      bestDist = 9999
+      bestCell = borderCells[0]
+      currentPos = gamestate.getAgentPosition(self.index)
+      for cell in borderCells:
+        dist = self.getMazeDistance(currentPos, cell)
+        if dist < bestDist:
+          bestDist = dist
+          bestCell = cell
+      self.debugClear()
+      self.goal = bestCell
+      return
+    else:
+      self.debugClear()
+      self.goal = goal
+
 
   def checkGoalState(self):
    """
@@ -170,12 +187,35 @@ class OffensiveReflexAgent(CaptureAgent):
 
     if self.hasDied(gameState):
       self.actionList = []
-      self.updateGoalState(self.getClosestFood(gameState))
+      self.updateGoalState(self.getClosestFood(gameState), gameState)
 
     self.debugDraw(self.goal, (1, 0, 0))
     #raw_input()
+
+    enemies = self.getOpponents(gameState)
+
+    for enemy in enemies:
+      enemyPosition = gameState.getAgentPosition(enemy)
+      if enemyPosition != None:
+        enemyDist = self.getMazeDistance(gameState.getAgentPosition(self.index), enemyPosition)
+        if enemyDist <= 6 and gameState.getAgentState(self.index).isPacman and not gameState.getAgentState(enemy).isPacman:
+          borderCells = self.getBorderCells(gameState)
+          bestDist = 9999
+          bestCell = borderCells[0]
+          currentPos = gameState.getAgentPosition(self.index)
+          for cell in borderCells:
+            dist = self.getMazeDistance(currentPos, cell)
+            if dist < bestDist:
+              bestDist = dist
+              bestCell = cell
+          self.debugClear()
+          self.goal = bestCell
+          self.actionList = []
+          self.actionList = self.breadthFirstSearch(gameState)
+
+
     if len(self.actionList) == 0:
-      self.updateGoalState(self.getClosestFood(gameState))
+      self.updateGoalState(self.getClosestFood(gameState), gameState)
       self.actionList = self.breadthFirstSearch(gameState)
 
     print(self.actionList)
@@ -266,3 +306,245 @@ class OffensiveReflexAgent(CaptureAgent):
 
     return borderCells
 
+class DefensiveAgent1(CaptureAgent):
+
+  def registerInitialState(self, gameState):
+    """
+    Registers the 1st state when the game starts with the system
+    :param gameState: The variables of the current state
+    """
+    self.start = gameState.getAgentPosition(self.index);
+    CaptureAgent.registerInitialState(self, gameState);
+
+  def getSuccessor(self, gameState, action):
+    """
+    Finds the next successor which is a grid position (location tuple).
+    :param gameState:
+    :param action: The move the successor will make (N,S,E,W)
+    :returns successor: A new agent with the action specified applied on it
+    """
+    successor = gameState.generateSuccessor(self.index, action)
+    pos = successor.getAgentState(self.index).getPosition()
+    if pos != nearestPoint(pos):
+      # Only half a grid position was covered
+      return successor.generateSuccessor(self.index, action)
+    else:
+      return successor
+
+  def getBestDirection(self, gamestate):
+    """
+    Returns a direction for the agent to move in, the direction
+    is calculated through specific checks highlighed below
+    :param gamestate: The variables of the current state
+    :return: bestAction: The best direction for the bot to move in
+    """
+
+    # Get The legal moves and obtain a list of cells a long the border between teams
+    legalActions = gamestate.getLegalActions(self.index)
+    borderCell = self.getBorderCells(gamestate)
+
+    # From the borderCell list, choose a random cell to be our target
+    targetCell = random.choice(borderCell)
+
+    #By default, have the agent stop if there isn't a valid move. Set a placeholder distance value
+    bestAction = "Stop"
+    bestDistance = 9999
+
+    for action in legalActions:
+      enemies = self.getOpponents(gamestate)
+
+      #Loop through the list of enemy positions and check if we can see an enemy (enemyPostion != None)
+      #If we see an enemy, compare the agent and the enemy's distance
+      #If the enemy is within 10 distance units of the agent and is on our side (enemy.isPacman == true)
+      #Pursue it, by finding the action that gets us closest, return that action
+      for enemy in enemies:
+        enemyPosition = gamestate.getAgentPosition(enemy)
+        if enemyPosition != None:
+          enemyDist = self.getMazeDistance(gamestate.getAgentPosition(self.index), enemyPosition)
+          if enemyDist <= 10 and gamestate.getAgentState(enemy).isPacman:
+            for action in legalActions:
+              successor = self.getSuccessor(gamestate, action)
+              successorPos = successor.getAgentPosition(self.index)
+              distSuccessor = self.getMazeDistance(successorPos, enemyPosition)
+              if distSuccessor < bestDistance:
+                bestDistance = distSuccessor
+                bestAction = action
+            return bestAction
+
+      #This code will be executed if an enemy wasn't detected
+      #We return the action of the successor agent that is closest to the target wall after looping through all actions.
+      successor = self.getSuccessor(gamestate, action)
+      successorPos = successor.getAgentPosition(self.index)
+      distSuccessor = self.getMazeDistance(successorPos, targetCell)
+
+      if distSuccessor < bestDistance:
+        bestDistance = distSuccessor
+        bestAction = action
+    return bestAction
+
+  def getBorderCells(self, gameState):
+    """
+    Returns a list of cells that represent the border between teams
+    :param gameState: The variables of the current state
+    :return: List of cells that is on our teams side, but borders the other team
+    Important Note: This code was sourced from vidar.py. As mentioned above, it was
+    a much cleaner implementation than our previous getBorderCells method which inolved
+    heavy list manipulations and many loops
+    """
+
+    #List that will hold the cells that lie on our teams side, but border the other team
+    borderCells = []
+
+    #Obtain the matrix of walls around the entire map
+    wallsMatrix = gameState.data.layout.walls
+    wallsList = wallsMatrix.asList()
+
+    #Using the width of the map, calculate the Red and Blue teams border cell column value
+    #The calculations return 15.5, the red teams side ends at 15, blue teams side starts at 16, hence ceil()
+    layoutX = wallsMatrix.width
+    redX = (layoutX - 1) / 2
+    blueX = (int)(math.ceil((float)(layoutX - 1) / 2))
+
+    #Using the height of the map, the number of rows, loop through the number of rows
+    #and add the cells to the return list that are not walls
+    layoutY = wallsMatrix.height - 1
+    if (gameState.isOnRedTeam(self.index)):
+      for y in range(1, layoutY - 1):
+        if ((redX, y) not in wallsList):
+          borderCells.append((redX, y))
+    else:
+      for y in range(1, layoutY - 1):
+        if ((blueX, y) not in wallsList):
+          borderCells.append((blueX, y))
+
+    return borderCells
+
+  def chooseAction(self, gameState):
+    """
+    Returns the best action to make as decided upon by the getBestDirection() method
+    :param gameState: The variables of the current state
+    :return: The best direction for the agent to move in
+    """
+    return self.getBestDirection(gameState)
+
+
+class DefensiveAgent2(CaptureAgent):
+
+  def registerInitialState(self, gameState):
+    """
+    Registers the 1st state when the game starts with the system
+    :param gameState: The variables of the current state
+    """
+    self.start = gameState.getAgentPosition(self.index);
+    CaptureAgent.registerInitialState(self, gameState);
+
+  def getSuccessor(self, gameState, action):
+    """
+    Finds the next successor which is a grid position (location tuple).
+    :param gameState:
+    :param action: The move the successor will make (N,S,E,W)
+    :returns successor: A new agent with the action specified applied on it
+    """
+    successor = gameState.generateSuccessor(self.index, action)
+    pos = successor.getAgentState(self.index).getPosition()
+    if pos != nearestPoint(pos):
+      # Only half a grid position was covered
+      return successor.generateSuccessor(self.index, action)
+    else:
+      return successor
+
+  def getBestDirection(self, gamestate):
+    """
+    Returns a direction for the agent to move in, the direction
+    is calculated through specific checks highlighed below
+    :param gamestate: The variables of the current state
+    :return: bestAction: The best direction for the bot to move in
+    """
+
+    # Get The legal moves and obtain a list of cells a long the border between teams
+    legalActions = gamestate.getLegalActions(self.index)
+    borderCell = self.getBorderCells(gamestate)
+
+    # From the borderCell list, choose a random cell to be our target
+    targetCell = random.choice(borderCell)
+
+    # By default, have the agent stop if there isn't a valid move. Set a placeholder distance value
+    bestAction = "Stop"
+    bestDistance = 9999
+
+    for action in legalActions:
+      enemies = self.getOpponents(gamestate)
+
+      # Loop through the list of enemy positions and check if we can see an enemy (enemyPostion != None)
+      # If we see an enemy, compare the agent and the enemy's distance
+      # If the enemy is within 10 distance units of the agent and is on our side (enemy.isPacman == true)
+      # Pursue it, by finding the action that gets us closest, return that action
+      for enemy in enemies:
+        enemyPosition = gamestate.getAgentPosition(enemy)
+        if enemyPosition != None:
+          enemyDist = self.getMazeDistance(gamestate.getAgentPosition(self.index), enemyPosition)
+          if enemyDist <= 10 and gamestate.getAgentState(enemy).isPacman:
+            for action in legalActions:
+              successor = self.getSuccessor(gamestate, action)
+              successorPos = successor.getAgentPosition(self.index)
+              distSuccessor = self.getMazeDistance(successorPos, enemyPosition)
+              if distSuccessor < bestDistance:
+                bestDistance = distSuccessor
+                bestAction = action
+            return bestAction
+
+      # This code will be executed if an enemy wasn't detected
+      # We return the action of the successor agent that is closest to the target wall after looping through all actions.
+      successor = self.getSuccessor(gamestate, action)
+      successorPos = successor.getAgentPosition(self.index)
+      distSuccessor = self.getMazeDistance(successorPos, targetCell)
+
+      if distSuccessor < bestDistance:
+        bestDistance = distSuccessor
+        bestAction = action
+    return bestAction
+
+  def getBorderCells(self, gameState):
+    """
+    Returns a list of cells that represent the border between teams
+    :param gameState: The variables of the current state
+    :return: List of cells that is on our teams side, but borders the other team
+    Important Note: This code was sourced from vidar.py. As mentioned above, it was
+    a much cleaner implementation than our previous getBorderCells method which inolved
+    heavy list manipulations and many loops
+    """
+
+    # List that will hold the cells that lie on our teams side, but border the other team
+    borderCells = []
+
+    # Obtain the matrix of walls around the entire map
+    wallsMatrix = gameState.data.layout.walls
+    wallsList = wallsMatrix.asList()
+
+    # Using the width of the map, calculate the Red and Blue teams border cell column value
+    # The calculations return 15.5, the red teams side ends at 15, blue teams side starts at 16, hence ceil()
+    layoutX = wallsMatrix.width
+    redX = (layoutX - 1) / 2
+    blueX = (int)(math.ceil((float)(layoutX - 1) / 2))
+
+    # Using the height of the map, the number of rows, loop through the number of rows
+    # and add the cells to the return list that are not walls
+    layoutY = wallsMatrix.height - 1
+    if (gameState.isOnRedTeam(self.index)):
+      for y in range(1, layoutY - 1):
+        if ((redX, y) not in wallsList):
+          borderCells.append((redX, y))
+    else:
+      for y in range(1, layoutY - 1):
+        if ((blueX, y) not in wallsList):
+          borderCells.append((blueX, y))
+
+    return borderCells
+
+  def chooseAction(self, gameState):
+    """
+    Returns the best action to make as decided upon by the getBestDirection() method
+    :param gameState: The variables of the current state
+    :return: The best direction for the agent to move in
+    """
+    return self.getBestDirection(gameState)
