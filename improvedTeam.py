@@ -29,7 +29,7 @@ from game import Actions
 #TODO:Check for uneeded imports.
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'OffensiveReflexAgent', second = 'OffensiveReflexAgent'):
+               first = 'OffensiveReflexAgent', second = 'agent'):
   return [eval(first)(firstIndex), eval(second)(secondIndex)]
 
 ###################################################
@@ -37,10 +37,16 @@ def createTeam(firstIndex, secondIndex, isRed,
 # and also chooses the maximizing action. I originally
 # wanted to have all the code contained in OffensiveReflexAgent,
 # and inherit CaptureAgent, however weird behavior started 
-# to occur and I am not sure if it was the removal
+# to occur and I did not have enough time to investigate
+# the problem further. Im not sure if it was the removal
 # of any of these functions included here.
 # (In particular the original getFeatures and getWeights methods).
 ###################################################
+
+class agent(CaptureAgent):
+    def chooseAction(self, gameState):
+        return random.choice(gameState.getLegalActions(self.index))
+
 class ReflexCaptureAgent(CaptureAgent):
 
   def registerInitialState(self, gameState):
@@ -53,6 +59,7 @@ class ReflexCaptureAgent(CaptureAgent):
     self.start = gameState.getAgentPosition(self.index)
     CaptureAgent.registerInitialState(self, gameState)
     self.goal = self.rushCapsule(gameState)
+    self.walls = gameState.getWalls()
     self.costFn = lambda x: 1
     self.actionList = self.breadthFirstSearch(gameState)
     print(self.actionList)
@@ -72,8 +79,11 @@ class ReflexCaptureAgent(CaptureAgent):
         # These values are hardcoded, seem to be least conflict area
         # travels along the outer edge of the map first.
         if gameState.isOnRedTeam(self.index):
-            return self.getClosestFood(gameState)
+            #return self.getClosestFood(gameState)
             #return (21, 1)
+            #return (3, 5)
+            #return (3, 10)
+            return (3, 14)
         else:
             return (10, 14)
 
@@ -94,17 +104,16 @@ class ReflexCaptureAgent(CaptureAgent):
         if temp_pos < min_pos:
           min_pos = temp_pos
           best_choice = food
-    #print(best_choice)
+    print(best_choice)
     return best_choice
 
-  def isGoalState(self, state, gameState):
+  def isGoalState(self, state):
     """
     Returns a boolean that checks to see whether or not current (x, y)
     matches goal (x, y).
     :param state: Current (x, y) that is being checked.
     :param gameState: The variables of the current state.
     """
-    self.debugDraw(self.goal, (1, 0, 0))
     isGoal = state == self.goal
     return isGoal
 
@@ -116,10 +125,16 @@ class ReflexCaptureAgent(CaptureAgent):
     self.debugClear()
     self.goal = goal
 
+  def checkGoalState(self, goal):
+   """
+   Check for enemies near the goal, (x, y).
+   """
+   pass
+
   def breadthFirstSearch(self, gameState):
     current_pos = gameState.getAgentPosition(self.index)
-    print(current_pos)
-    if self.isGoalState(current_pos, gameState):
+
+    if self.isGoalState(current_pos):
       return []
 
     myQueue = util.Queue()
@@ -132,65 +147,56 @@ class ReflexCaptureAgent(CaptureAgent):
       if current_pos not in visitedNodes:
         visitedNodes.append(current_pos)
 
-      if self.isGoalState(current_pos, gameState):
-        print(actions)
-        raw_input()
+      if self.isGoalState(current_pos):
+        #print(actions)
         return actions
 
-      #this line is wrong, removed cost
-      #print(gameState.getLegalActions(self.index))
-      #print(self.getSuccessors(gameState))
-      #for nextNode, action, cost in self.getSuccessors(gameState):
-      legalMoves = gameState.getLegalActions(self.index)
-      futureMoves = []
-      for move in legalMoves:
-          successor = self.getSuccessors(gameState)
-          print(successor)
-          #futureMoves.append(successor.getAgentPosition(self.index))
-
-      #print(succesor.getAgentPosition(self.index))
-      #raw_input()
-
-      for nextNode, action, cost in futureMoves:
-      #self.getSuccessor(gameState):
+      for nextNode, action, cost in self.getSuccessors(current_pos):
         newAction = actions + [action]
         myQueue.push((nextNode, newAction))
-        #print ('stuck')
 
   def chooseAction(self, gameState):
     """
     Picks among the actions with the highest Q(s,a).
     """
-    actions = gameState.getLegalActions(self.index)
+    #raw_input()
+    self.debugDraw(self.goal, (1, 0, 0))
+    #raw_input()
+    if len(self.actionList) < 1:
+      self.updateGoalState(self.getClosestFood(gameState))
+      self.actionList = self.breadthFirstSearch(gameState)
 
+    print(self.actionList)
+    return self.actionList.pop(0)
+    #actions = gameState.getLegalActions(self.index)
     # You can profile your evaluation time by uncommenting these lines
     # start = time.time()
-    values = [self.evaluate(gameState, a) for a in actions]
-    if self.index == 1:
-      print(values, file=sys.stderr)
+    #values = [self.evaluate(gameState, a) for a in actions]
+    #if self.index == 1:
+      #print(values, file=sys.stderr)
       # print(self.getPreviousObservation(), file=sys.stderr)
 
     # print 'eval time for agent %d: %.4f' % (self.index, time.time() - start)
 
-    maxValue = max(values)
-    bestActions = [a for a, v in zip(actions, values) if v == maxValue]
+    #maxValue = max(values)
+    #bestActions = [a for a, v in zip(actions, values) if v == maxValue]
     # if self.index == 1:
     #   print(bestActions, file=sys.stderr)
 
-    foodLeft = len(self.getFood(gameState).asList())
+    #foodLeft = len(self.getFood(gameState).asList())
 
-    if foodLeft <= 2 or gameState.getAgentState(self.index).numCarrying >= 3:
-      bestDist = 9999
-      for action in actions:
-        successor = self.getSuccessor(gameState, action)
-        pos2 = successor.getAgentPosition(self.index)
-	dist = self.getMazeDistance(self.start,pos2)
-        if dist < bestDist:
-          bestAction = action
-          bestDist = dist
-      return bestAction
+    #if foodLeft <= 2 or gameState.getAgentState(self.index).numCarrying >= 3:
+      #bestDist = 9999
+      #for action in actions:
+        #successor = self.getSuccessor(gameState, action)
+        #pos2 = successor.getAgentPosition(self.index)
+	#dist = self.getMazeDistance(self.start,pos2)
+        #if dist < bestDist:
+          #bestAction = action
+          #bestDist = dist
+      #return bestAction
 
-    return random.choice(bestActions)
+    #return random.choice(bestActions)
 
   def getSuccessor(self, gameState, action):
     """
@@ -204,25 +210,16 @@ class ReflexCaptureAgent(CaptureAgent):
     else:
       return successor
 
-  def getSuccessors(self, gameState):
+  def getSuccessors(self, state):
     successors = []
-    #self.index
-    #for action in gameState.getLegalActions(self.index):
     for action in [Directions.NORTH, Directions.SOUTH, Directions.EAST, Directions.WEST]:
-      (x, y) = gameState.getAgentState(self.index).getPosition()
-      #print(x)
-      #print(y)
-      #(x, y) = gameState.getAgentState(self.index)
+      x, y = state
       dx, dy = Actions.directionToVector(action)
       nextx, nexty = int(x + dx), int(y + dy)
-      #print("x:", nextx, "y:", nexty)
-      #raw_input()
-      walls = gameState.getWalls()
-      #if not gameState.getWalls()[nextx][nexty]:
-      if not walls[nextx][nexty]:
+      if not self.walls[nextx][nexty]:
         nextState = (nextx, nexty)
         cost = self.costFn(nextState)
-        successors.append( ( nextState, action, cost) )
+        successors.append( (nextState, action, cost) )
     return successors
 
   def evaluate(self, gameState, action):
@@ -289,8 +286,8 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
       features['distanceToFood'] = minDistance
 
 
-    if self.isGoalState(myPos, gameState):
-        self.updateGoalState(self.getClosestFood(gameState))
+    #if self.isGoalState(myPos):
+        #self.updateGoalState(self.getClosestFood(gameState))
 
     #print here
     #self.breadthFirstSearch(gameState)
