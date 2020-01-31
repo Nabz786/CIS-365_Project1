@@ -48,7 +48,7 @@ class OffensiveAgent(CaptureAgent):
     """
     Function to establish initial states of the game.
     This is where the offensive agent gets its first target destination (self.goal).
-    Which is a point that avoids the agenttraveling through the middle of the map at first.
+    Which is a point that avoids the agent traveling through the middle of the map at first.
     :param gameState: The variables of the current state.
     """
     CaptureAgent.registerInitialState(self, gameState)
@@ -73,8 +73,8 @@ class OffensiveAgent(CaptureAgent):
   def getClosestFood(self, gameState):
     """
     Returns the (x, y) coordinate of the closest food to an agent
-    @:param gameState: The variables of the current state
-    @:returns best_choice: The closest food to the agent
+    :param gameState: The variables of the current state
+    :returns best_choice: The closest food to the agent
     """
 
     #Get the current list of food and our agents position
@@ -98,7 +98,7 @@ class OffensiveAgent(CaptureAgent):
   def isGoalState(self, state):
     """
     Returns a boolean that indicates whether or not current position (x, y)
-    matches goal position (x,y,)
+    matches goal position (x,y)
     :param state: Current (x, y) that is being checked.
     :param gameState: The variables of the current state.
     """
@@ -111,7 +111,6 @@ class OffensiveAgent(CaptureAgent):
     assist in determining where our agent will proceed to after its reached its target
     :param goal: New (x, y) coordinate that represents end target.
     """
-
 
     howMuchFoodToEat = 1
 
@@ -149,6 +148,8 @@ class OffensiveAgent(CaptureAgent):
     Search algorithm that finds a path to the current goal (x,y) position.
     This is called everytime the goal is updated, to build the shortest path to the target.
     :param gameState: The variables of the current state.
+    :returns actions: List of actions (N,S,E,W), that corresponds from index
+    of agent to end target
     """
 
     current_pos = gameState.getAgentPosition(self.index)
@@ -164,12 +165,17 @@ class OffensiveAgent(CaptureAgent):
     while not myQueue.isEmpty():
       current_pos, actions = myQueue.pop()
       if current_pos not in visitedNodes:
+        #adds to list of visited locations
         visitedNodes.append(current_pos)
       if self.isGoalState(current_pos):
         return actions
 
+      #This takes all of the next possible moves for the current position
+      #and pushes it to the queue
       for nextNode, action in self.getSuccessors(current_pos):
         newAction = actions + [action]
+        #Next node is the successor new (x, y) and newAction is that action
+        #that it takes to get there
         myQueue.push((nextNode, newAction))
 
   def hasDied(self, gameState):
@@ -251,23 +257,33 @@ class OffensiveAgent(CaptureAgent):
     state has additional moves it can make.
     :param state: the (x, y) coordinate of a position.
     :return successors: Tuple that hold the best action to make and resulting map position
-    #Note this method was taken from captureagent.py
+
+    Important Note: This method was taken from searchAgent.py, as it was used
+    during the initial implementation of BFS in search.py to permutate
+    the next possible moves
     """
     successors = []
     bestDist = 9999
     for action in [Directions.NORTH, Directions.SOUTH, Directions.EAST, Directions.WEST]:
       x, y = state
+
+      #converts direction to a coordinate
+      #Ex: Directions.North = (1, 0)
       dx, dy = Actions.directionToVector(action)
+
+      #apply new coordinate
       nextx, nexty = int(x + dx), int(y + dy)
+
+      #check if its a legal move
       if not self.walls[nextx][nexty]:
         nextState = (nextx, nexty)
-
         dist = self.getMazeDistance(nextState, self.goal)
+
         if dist < bestDist:
           bestDist = dist
           bestAction = action
           bestState = nextState
-    successors.append( (bestState, bestAction) )
+    successors.append((bestState, bestAction))
     return successors
 
   def getBorderCells(self, gameState):
