@@ -11,7 +11,6 @@
 # Student side autograding was added by Brad Miller, Nick Hay, and
 # Pieter Abbeel (pabbeel@cs.berkeley.edu).
 
-# baselineTeam.py
 # ---------------
 # Licensing Information: Please do not distribute or publish solutions to this
 # project. You are free to use and extend these projects for educational
@@ -28,51 +27,44 @@ from util import nearestPoint
 from game import Actions
 
 def createTeam(firstIndex, secondIndex, isRed,
-        first = 'OffensiveReflexAgent', second = 'DefensiveAgent2'):
+        first = 'OffensiveAgent', second = 'DefensiveAgent'):
   return [eval(first)(firstIndex), eval(second)(secondIndex)]
 
-###################################################
-# Test class that creates a dummy agent.
-###################################################
-class agent(CaptureAgent):
-    def chooseAction(self, gameState):
-        return random.choice(gameState.getLegalActions(self.index))
-
-###################################################
-# Base class for an offensive bot. Sets up initial state,
-# and also chooses the maximizing action. I originally
-# wanted to have all the code contained in OffensiveReflexAgent,
-# and inherit CaptureAgent, however weird behavior started 
-# to occur and I did not have enough time to investigate
-# the problem further. Im not sure if it was the removal
-# of any of these functions included here.
-# (In particular the original getFeatures and getWeights methods).
-###################################################
-class OffensiveReflexAgent(CaptureAgent):
+#######################################################################
+#Offensive Agent class that inherits functions from the capture agent.
+#This agent uses the breadth first search (BFS) for shortest path finding.
+#Through a regular game cycle, the offensive agent algorithm will build
+#a list of actions that represent a path to a algorithmically calculated goal
+#The following are possible goals:
+#Closest Food or Closest Location on ones friendly map area
+#
+#By traversing the shortest path calculated by the BFS algorithm, the
+#Agent will leverage additional logic to attempt to dodge enemies,
+#as well as determine how much food to collect
+#######################################################################
+class OffensiveAgent(CaptureAgent):
 
   def registerInitialState(self, gameState):
     """
     Function to establish initial states of the game.
-    This is where the offensive agent gets its first
-    target destination (self.goal).
+    This is where the offensive agent gets its first target destination (self.goal).
+    Which is a point that avoids the agenttraveling through the middle of the map at first.
     :param gameState: The variables of the current state.
     """
     CaptureAgent.registerInitialState(self, gameState)
     self.goal = self.defineFirstGoal(gameState)
     self.walls = gameState.getWalls()
-    self.costFn = lambda x: 1
-    start = time.time()
     self.actionList = self.breadthFirstSearch(gameState)
-    print('eval time for agent:', (time.time() - start))
-    #print(self.actionList)
 
   def defineFirstGoal(self, gameState):
     """
-    This method is to decide what strategy the offensive bot will first
-    try to do. The first goal is hardcoded because it seems to be 
-    the least conflict area and travels along the outer edge of the map.
+    Influnces the strategy the offensive bot will first try to do.
+    The first goal is hardcoded because it points the agent to the area
+    of least conflict making sure that the agent travels along the outer edge of the map.
     :param gameState: The variables of the current state.
     """
+
+    #The tuples below represent points along the bottom and top walls
     if gameState.isOnRedTeam(self.index):
       return (21, 1)
     else:
@@ -80,27 +72,33 @@ class OffensiveReflexAgent(CaptureAgent):
 
   def getClosestFood(self, gameState):
     """
-    Function that returns the (x, y) coordinate of the closest food near
-    an agent. This behavior isnt too advanced as it does not account for 
-    enemies in the way to the food.
+    Returns the (x, y) coordinate of the closest food to an agent
+    @:param gameState: The variables of the current state
+    @:returns best_choice: The closest food to the agent
     """
+
+    #Get the current list of food and our agents position
     foodList = self.getFood(gameState).asList()
-    if len(foodList) > 0: # This should always be True,  but better safe than sorry
-      myPos = gameState.getAgentState(self.index).getPosition()
-      min_pos = 9999
-      best_choice = None
+    currentAgentPosition = gameState.getAgentPosition(self.index)
+
+    #Create temporary variables to keep track of state in the loop below
+    bestFood = (16, 2)
+    bestDist = 9999
+
+    #Loop through the list of food, find the closest food, return the position tuple
+    if len(foodList) > 0:
       for food in foodList:
-        temp_pos = self.getMazeDistance(myPos, food)
-        temp_food = food
-        if temp_pos < min_pos:
-          min_pos = temp_pos
-          best_choice = food
-    return best_choice
+        distanceToFood = self.getMazeDistance(currentAgentPosition, food)
+
+        if distanceToFood < bestDist:
+          bestDist = distanceToFood
+          bestFood = food
+    return bestFood
 
   def isGoalState(self, state):
     """
-    Returns a boolean that checks to see whether or not current (x, y)
-    matches goal (x, y).
+    Returns a boolean that indicates whether or not current position (x, y)
+    matches goal position (x,y,)
     :param state: Current (x, y) that is being checked.
     :param gameState: The variables of the current state.
     """
@@ -109,12 +107,29 @@ class OffensiveReflexAgent(CaptureAgent):
 
   def updateGoalState(self, goal, gamestate):
     """
-    Changes the (x, y) destination to a new goal.
+    Changes the (x, y) goal position to a new goal position. This method will
+    assist in determining where our agent will proceed to after its reached its target
     :param goal: New (x, y) coordinate that represents end target.
     """
-    
+
+
+    howMuchFoodToEat = 1
+
+    #Check to see if the capsule has been eaten and the enemies are currently scared
+    #If this is true, our agent will get 6 pieces of food before returning, if not,
+    #It will only collect one piece
+    if len(self.getCapsules(gamestate)) == 0:
+      enemies = self.getOpponents(gamestate)
+      if gamestate.getAgentState(enemies[0]).scaredTimer == 0:
+        howMuchFoodToEat = 1
+      else:
+        howMuchFoodToEat = 6
+
     numCarrying = gamestate.getAgentState(self.index).numCarrying
-    if numCarrying >= 1:
+
+    #Check to see if the agent is carrying the target amount, if so, find the closest
+    #"home" cell and update our target. If not, continue to the current goal
+    if numCarrying >= howMuchFoodToEat:
       borderCells = self.getBorderCells(gamestate)
       bestDist = 9999
       bestCell = borderCells[0]
@@ -124,23 +139,24 @@ class OffensiveReflexAgent(CaptureAgent):
         if dist < bestDist:
           bestDist = dist
           bestCell = cell
-      #self.debugClear()
       self.goal = bestCell
       return
     else:
-      #self.debugClear()
       self.goal = goal
 
   def breadthFirstSearch(self, gameState):
     """
-    Search algorithm that finds a path to the current goal.
-    This should be called everytime the goal is updated.
+    Search algorithm that finds a path to the current goal (x,y) position.
+    This is called everytime the goal is updated, to build the shortest path to the target.
     :param gameState: The variables of the current state.
     """
+
     current_pos = gameState.getAgentPosition(self.index)
 
+    #Return an empty list if we have reached the specified goal
     if self.isGoalState(current_pos):
       return []
+
     myQueue = util.Queue()
     visitedNodes = []
 
@@ -150,24 +166,27 @@ class OffensiveReflexAgent(CaptureAgent):
       if current_pos not in visitedNodes:
         visitedNodes.append(current_pos)
       if self.isGoalState(current_pos):
-        #print(actions)
         return actions
 
-      for nextNode, action, cost in self.getSuccessors(current_pos):
+      for nextNode, action in self.getSuccessors(current_pos):
         newAction = actions + [action]
         myQueue.push((nextNode, newAction))
 
   def hasDied(self, gameState):
     """
-    Function that checks if the offensive bot has been eaten.
-    This function is important because it resets the goal to the closest
-    food point and also resets the list of actions to get
-    there (self.actionList).
+    Function that checks if the offensive bot has been eaten, by checking the previous observation
     :param gameState: The variables of the current state.
+    :return boolean: True or false, depending on if eaten or not
     """
+
+    #We only want to check the observation history if a decent history exists
     if len(self.observationHistory) > 10:
+
+       #Obtain the last state and from it obtain the agents last position (posHistory)
        obsHistory = self.observationHistory[len(self.observationHistory)-2]
        posHistory = obsHistory.getAgentPosition(self.index)
+
+       #Compare the agents current position to its last, if the distance is > 1 we teleported (respawned after dying)
        currentPos = gameState.getAgentPosition(self.index)
        distHistory = self.getMazeDistance(currentPos, posHistory)
        if distHistory > 1:
@@ -176,51 +195,63 @@ class OffensiveReflexAgent(CaptureAgent):
 
   def chooseAction(self, gameState):
     """
-    Every iteration pops off the first action of actionList,
-    and decides if actionList must be updated.
+    This is essentially the "Main" method of the agent, it decides where the agent will go
+    Every iteration on this method will pop and return the action in the actionList returned by the BFS
+    Goals are also updated if necessary
     :param gameState: The variables of the current state.
     """
 
+    #Check if our agent has died, if so create a new actionList, and update the goal
     if self.hasDied(gameState):
       self.actionList = []
       self.updateGoalState(self.getClosestFood(gameState), gameState)
 
-    #self.debugDraw(self.goal, (1, 0, 0))
+    enemies = self.getOpponents(gameState)
+
+    #This block checks for enemies within 6 map spaces of our agent, if one is found
+    #It will find the closest friendly space to the agent, update the goal, and find the BFS path to the goal
+    for enemy in enemies:
+      enemyPosition = gameState.getAgentPosition(enemy)
+      if enemyPosition != None:
+        enemyDist = self.getMazeDistance(gameState.getAgentPosition(self.index), enemyPosition)
+
+        #If the enemy is within 6 spaces and our agent is pacman and the enemy is a ghost
+        #We are in enemy territory and are being chased
+        if enemyDist <= 6 and (gameState.getAgentState(self.index).isPacman and
+                               not gameState.getAgentState(enemy).isPacman):
+
+            #Obtain the cells that border the enemy territory and find the closest one
+            borderCells = self.getBorderCells(gameState)
+            bestDist = 9999
+            bestCell = borderCells[0]
+            currentPos = gameState.getAgentPosition(self.index)
+            for cell in borderCells:
+              dist = self.getMazeDistance(currentPos, cell)
+              if dist < bestDist:
+                bestDist = dist
+                bestCell = cell
+            #Update the goal with the closest friendly cell
+            self.goal = bestCell
+            self.actionList = []
+            #Find the actions that will take us to the cell
+            self.actionList = self.breadthFirstSearch(gameState)
+
+    #By Default, if the action list is empty, find the nearest food to the agent,
+    #Update the goal with the food location and repopulate the action list with the BFS path to the food
     if len(self.actionList) == 0:
       self.updateGoalState(self.getClosestFood(gameState), gameState)
       self.actionList = []
       self.actionList = self.breadthFirstSearch(gameState)
 
-    enemies = self.getOpponents(gameState)
-
-    for enemy in enemies:
-      enemyPosition = gameState.getAgentPosition(enemy)
-      if enemyPosition != None:
-        enemyDist = self.getMazeDistance(gameState.getAgentPosition(self.index), enemyPosition)
-        if enemyDist <= 6 and gameState.getAgentState(self.index).isPacman and not gameState.getAgentState(enemy).isPacman:
-          borderCells = self.getBorderCells(gameState)
-          bestDist = 9999
-          bestCell = borderCells[0]
-          currentPos = gameState.getAgentPosition(self.index)
-          for cell in borderCells:
-            dist = self.getMazeDistance(currentPos, cell)
-            if dist < bestDist:
-              bestDist = dist
-              bestCell = cell
-          #self.debugClear()
-          self.goal = bestCell
-          self.actionList = []
-          self.actionList = self.breadthFirstSearch(gameState)
-
-    #print(self.actionList)
     return self.actionList.pop(0)
 
   def getSuccessors(self, state):
     """
     This method is called by the search function to check if a 
-    state has additional moves it can make. A list of possible moves 
-    for that specific state is returned.
+    state has additional moves it can make.
     :param state: the (x, y) coordinate of a position.
+    :return successors: Tuple that hold the best action to make and resulting map position
+    #Note this method was taken from captureagent.py
     """
     successors = []
     bestDist = 9999
@@ -230,14 +261,13 @@ class OffensiveReflexAgent(CaptureAgent):
       nextx, nexty = int(x + dx), int(y + dy)
       if not self.walls[nextx][nexty]:
         nextState = (nextx, nexty)
-        cost = self.costFn(nextState)
 
         dist = self.getMazeDistance(nextState, self.goal)
         if dist < bestDist:
           bestDist = dist
           bestAction = action
           bestState = nextState
-    successors.append( (bestState, bestAction, cost) )
+    successors.append( (bestState, bestAction) )
     return successors
 
   def getBorderCells(self, gameState):
@@ -246,8 +276,8 @@ class OffensiveReflexAgent(CaptureAgent):
     :param gameState: The variables of the current state
     :return: List of cells that is on our teams side, but borders the other team
     Important Note: This code was sourced from vidar.py. As mentioned above, it was
-    a much cleaner implementation than our previous getBorderCells method which inolved
-    heavy list manipulations and many loops
+    a much cleaner implementation than our previous getBorderCells method. It has also
+    been modified to return a different column of border cells
     """
 
     # List that will hold the cells that lie on our teams side, but border the other team
@@ -258,10 +288,10 @@ class OffensiveReflexAgent(CaptureAgent):
     wallsList = wallsMatrix.asList()
 
     # Using the width of the map, calculate the Red and Blue teams border cell column value
-    # The calculations return 15.5, the red teams side ends at 15, blue teams side starts at 16, hence ceil()
+    #Offset the final values by 3 to bring our agents further into friendly territory
     layoutX = wallsMatrix.width
-    redX = (layoutX - 1) / 2
-    blueX = (int)(math.ceil((float)(layoutX - 1) / 2))
+    redX = ((layoutX - 1) / 2) - 3
+    blueX = ((int)((math.ceil((float)(layoutX - 1) / 2)))) + 3
 
     # Using the height of the map, the number of rows, loop through the number of rows
     # and add the cells to the return list that are not walls
@@ -277,7 +307,12 @@ class OffensiveReflexAgent(CaptureAgent):
 
     return borderCells
 
-class DefensiveAgent1(CaptureAgent):
+#######################################################################
+#Defensive agent class that leverages the cells along the border to
+#create a patrolling movement by default. If the agent detects an
+#enemy it will find the path to the enemy agent greedily.
+#######################################################################
+class DefensiveAgent(CaptureAgent):
 
   def registerInitialState(self, gameState):
     """
@@ -373,8 +408,8 @@ class DefensiveAgent1(CaptureAgent):
     #Using the width of the map, calculate the Red and Blue teams border cell column value
     #The calculations return 15.5, the red teams side ends at 15, blue teams side starts at 16, hence ceil()
     layoutX = wallsMatrix.width
-    redX = (layoutX - 1) / 2
-    blueX = (int)(math.ceil((float)(layoutX - 1) / 2))
+    redX = ((layoutX - 1) / 2) - 1
+    blueX = ((int)((math.ceil((float)(layoutX - 1) / 2)))) + 1
 
     #Using the height of the map, the number of rows, loop through the number of rows
     #and add the cells to the return list that are not walls
@@ -481,7 +516,7 @@ class DefensiveAgent2(CaptureAgent):
     :param gameState: The variables of the current state
     :return: List of cells that is on our teams side, but borders the other team
     Important Note: This code was sourced from vidar.py. As mentioned above, it was
-    a much cleaner implementation than our previous getBorderCells method which inolved
+    a much cleaner implementation than our previous getBorderCells method which involved
     heavy list manipulations and many loops
     """
 
@@ -493,10 +528,10 @@ class DefensiveAgent2(CaptureAgent):
     wallsList = wallsMatrix.asList()
 
     # Using the width of the map, calculate the Red and Blue teams border cell column value
-    # The calculations return 15.5, the red teams side ends at 15, blue teams side starts at 16, hence ceil()
+    # Offset the final values by 1 to ensure our agent stays in friendly territory
     layoutX = wallsMatrix.width
-    redX = (layoutX - 1) / 2
-    blueX = (int)(math.ceil((float)(layoutX - 1) / 2))
+    redX = ((layoutX - 1) / 2) - 1
+    blueX = ((int)(math.ceil((float)(layoutX - 1) / 2))) + 1
 
     # Using the height of the map, the number of rows, loop through the number of rows
     # and add the cells to the return list that are not walls
